@@ -6,7 +6,7 @@ colorTo: green
 sdk: docker
 app_port: 7860
 pinned: false
-short_description: Minimal continuous-batching LLM engine — paged KV, prefix caching, SSE
+short_description: Minimal continuous-batching engine — paged KV + SSE
 ---
 
 # tiny_vllm
