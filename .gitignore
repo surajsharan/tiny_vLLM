@@ -15,3 +15,5 @@ hf_cache/
 # Editor
 .vscode/
 .idea/
+.claude/
+.cursor/
