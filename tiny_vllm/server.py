@@ -102,19 +102,19 @@ def build_app(config: EngineConfig, cors_allow_origins: Optional[list[str]] = No
         # (which has no Python backend and just serves files from web/).
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-        @app.get("/")
+        @app.get("/", response_model=None)
         async def root() -> FileResponse:
             return FileResponse(str(static_dir / "index.html"))
 
-        @app.get("/style.css")
+        @app.get("/style.css", response_model=None)
         async def _css() -> FileResponse:
             return FileResponse(str(static_dir / "style.css"))
 
-        @app.get("/app.js")
+        @app.get("/app.js", response_model=None)
         async def _js() -> FileResponse:
             return FileResponse(str(static_dir / "app.js"))
 
-        @app.get("/events.jsonl")
+        @app.get("/events.jsonl", response_model=None)
         async def _jsonl() -> FileResponse:
             return FileResponse(str(static_dir / "events.jsonl"))
     else:
@@ -137,7 +137,7 @@ def build_app(config: EngineConfig, cors_allow_origins: Optional[list[str]] = No
     async def snapshot() -> dict:
         return engine.snapshot()
 
-    @app.get("/engine/events")
+    @app.get("/engine/events", response_model=None)
     async def events(request: Request) -> StreamingResponse:
         q = engine.subscribe_events()
 
@@ -176,7 +176,7 @@ def build_app(config: EngineConfig, cors_allow_origins: Optional[list[str]] = No
             ignore_eos=req.ignore_eos,
         )
 
-    @app.post("/generate")
+    @app.post("/generate", response_model=None)
     async def generate(req: GenerateRequest, request: Request) -> StreamingResponse | JSONResponse:
         try:
             rid = engine.add_request(req.prompt, _params(req))
@@ -218,7 +218,7 @@ def build_app(config: EngineConfig, cors_allow_origins: Optional[list[str]] = No
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
-    @app.post("/v1/completions")
+    @app.post("/v1/completions", response_model=None)
     async def completions(req: CompletionsRequest, request: Request):
         # Single-prompt only (n=1) for the minimal impl.
         if isinstance(req.prompt, list):
