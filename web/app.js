@@ -81,11 +81,18 @@ function setMode(mode) {
     ui.connection.textContent = "replay";
     ui.connection.classList.remove("offline");
     ui.connection.classList.add("replay");
-    ui.send.disabled = true;
-    ui.sendTwice.disabled = true;
-    ui.prompt.disabled = true;
+    // Keep textarea editable — feels alive — but the Send buttons can't
+    // really submit, so they open the run-locally hint instead.
+    ui.send.disabled = false;
+    ui.sendTwice.disabled = false;
+    ui.prompt.disabled = false;
+    ui.send.classList.add("replay-locked");
+    ui.sendTwice.classList.add("replay-locked");
+    ui.send.title = "Replay mode — click to see how to run live locally";
+    ui.sendTwice.title = ui.send.title;
+    ui.prompt.placeholder = "Recorded demo — typing won't submit. Run the server locally to use your own prompts.";
     setBanner(
-      "REPLAY MODE — this is a pre-recorded session. Run the server locally to send your own prompts.",
+      "REPLAY MODE — this is a pre-recorded session. Send buttons show local-run instructions instead.",
       "replay-banner",
     );
     if (ui.speed) ui.speed.style.display = "";
@@ -412,15 +419,42 @@ async function sendPrompt(prompt) {
   }
 }
 
-ui.send.addEventListener("click", () => sendPrompt(ui.prompt.value));
-ui.sendTwice.addEventListener("click", async () => {
+function showRunLocally() {
+  const el = $("run-locally");
+  if (!el) return;
+  el.hidden = false;
+  el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function trySend(handler) {
+  if (state.mode !== "live") { showRunLocally(); return; }
+  handler();
+}
+
+ui.send.addEventListener("click", () => trySend(() => sendPrompt(ui.prompt.value)));
+ui.sendTwice.addEventListener("click", () => trySend(async () => {
   const p = ui.prompt.value;
   await sendPrompt(p);
   await new Promise(r => setTimeout(r, 200));
   await sendPrompt(p);
-});
+}));
 ui.prompt.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") sendPrompt(e.target.value);
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") trySend(() => sendPrompt(e.target.value));
+});
+
+// Run-locally callout controls.
+const rlClose = $("rl-close");
+if (rlClose) rlClose.addEventListener("click", () => { $("run-locally").hidden = true; });
+const rlCopy = $("rl-copy");
+if (rlCopy) rlCopy.addEventListener("click", async () => {
+  const cmd = $("run-locally").querySelector("pre").innerText.trim();
+  try {
+    await navigator.clipboard.writeText(cmd);
+    rlCopy.textContent = "Copied ✓";
+    setTimeout(() => { rlCopy.textContent = "Copy command"; }, 1500);
+  } catch {
+    rlCopy.textContent = "Copy failed";
+  }
 });
 
 if (ui.speed) ui.speed.addEventListener("change", () => {

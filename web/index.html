@@ -58,6 +58,18 @@
       <button id="restart" style="display:none" class="ghost">Restart</button>
     </span>
   </div>
+
+  <div id="run-locally" class="run-locally" hidden>
+    <div class="rl-head">This is a <b>recorded</b> session — to send live prompts, run the server locally.</div>
+    <pre><code>git clone https://github.com/surajsharan/tiny_vLLM
+cd tiny_vLLM &amp;&amp; pip install -r requirements.txt
+python -m tiny_vllm.server --model Qwen/Qwen2.5-0.5B-Instruct
+# then open http://localhost:8000</code></pre>
+    <div class="rl-foot">
+      <button id="rl-copy" class="ghost">Copy command</button>
+      <button id="rl-close" class="ghost">Dismiss</button>
+    </div>
+  </div>
 </section>
 
 <main>
@@ -94,7 +106,7 @@
 </main>
 
 <footer>
-  Subscribed to <code>/engine/events</code> · Source on <a href="https://github.com/surajsharan/tiny_vLLM" target="_blank" rel="noopener">github.com/surajsharan/tiny_vLLM</a> · Designed to match <a href="https://surajsharan.github.io/">surajsharan.github.io</a>.
+  Subscribed to <code>/engine/events</code> · Source on <a href="https://github.com/surajsharan/tiny_vLLM" target="_blank" rel="noopener">github.com/surajsharan/tiny_vLLM</a>
 </footer>
 
 <script src="app.js"></script>

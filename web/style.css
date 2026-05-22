@@ -183,7 +183,12 @@ button {
   transition: all 0.12s ease;
 }
 button:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
-button:disabled { opacity: 0.35; cursor: not-allowed; background: var(--bg-elev); color: var(--muted); border-color: var(--border); }
+button:disabled { opacity: 0.55; cursor: not-allowed; background: var(--bg-elev); color: var(--muted); border-color: var(--border); }
+/* Replay-mode "soft disable": looks clickable, but Send opens the run-locally
+ * hint instead of submitting. We mark it with a class so the cursor and
+ * tooltip read as intentional, not broken. */
+button.replay-locked { cursor: help; }
+button.replay-locked::after { content: " ✦"; color: var(--purple); }
 button.ghost {
   background: transparent;
   border: 1px solid var(--border-strong);
@@ -197,6 +202,36 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 #send-twice:hover { background: var(--accent-bg); }
 
 textarea:disabled { opacity: 0.5; }
+
+/* ---------- run-locally callout (replay mode) ---------- */
+.run-locally {
+  margin-top: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--purple);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.run-locally[hidden] { display: none; }
+.run-locally .rl-head {
+  color: var(--fg);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.run-locally .rl-head b { color: var(--purple); font-weight: 600; }
+.run-locally pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--mono); font-size: 12px;
+  color: var(--accent);
+  overflow-x: auto;
+}
+.run-locally .rl-foot { display: flex; gap: 8px; }
 
 .replay-controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .replay-controls select {
