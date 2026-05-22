@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tiny_vllm — engine internals</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>tiny_vllm <span class="muted">— minimal continuous-batching engine</span></h1>
+  <div class="status">
+    <span id="connection" class="badge offline">disconnected</span>
+    <span id="model" class="muted"></span>
+  </div>
+</header>
+
+<section class="prompt-box">
+  <textarea id="prompt" rows="2" placeholder="Type a prompt and press Send (or Cmd/Ctrl+Enter)…">Explain paged attention in two sentences.</textarea>
+  <div class="controls">
+    <label>max_tokens <input id="max_tokens" type="number" value="64" min="1" max="2048"></label>
+    <label>temperature <input id="temperature" type="number" value="0.7" step="0.1" min="0" max="2"></label>
+    <label>top_p <input id="top_p" type="number" value="0.9" step="0.05" min="0" max="1"></label>
+    <button id="send">Send</button>
+    <button id="send-twice" title="Submit the same prompt twice — second should hit prefix cache">Send ×2 (prefix demo)</button>
+  </div>
+</section>
+
+<main>
+  <section class="card">
+    <h2>Block pool <span class="muted" id="pool-summary"></span></h2>
+    <div id="block-pool" class="block-pool"></div>
+    <div class="legend">
+      <span class="legend-item"><span class="swatch swatch-free"></span>free</span>
+      <span class="legend-item"><span class="swatch swatch-cached"></span>cached (evictable)</span>
+      <span class="legend-item"><span class="swatch swatch-used"></span>in use</span>
+      <span class="legend-item"><span class="swatch swatch-shared"></span>shared (refcount&gt;1)</span>
+      <span class="legend-item"><span class="swatch swatch-hashed-edge"></span>hashed (border)</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Scheduler <span class="muted" id="sched-step"></span></h2>
+    <div class="stats">
+      <div class="stat"><div class="stat-label">tokens this step</div><div class="stat-value" id="stat-tokens">0</div></div>
+      <div class="stat"><div class="stat-label">prefill / decode</div><div class="stat-value" id="stat-pfdec">0 / 0</div></div>
+      <div class="stat"><div class="stat-label">step (ms)</div><div class="stat-value" id="stat-ms">0</div></div>
+      <div class="stat"><div class="stat-label">prefix cache hit-rate</div><div class="stat-value" id="stat-cache">0%</div></div>
+      <div class="stat"><div class="stat-label">free blocks</div><div class="stat-value" id="stat-free">0</div></div>
+      <div class="stat"><div class="stat-label">preemptions (total)</div><div class="stat-value" id="stat-pre">0</div></div>
+    </div>
+    <h3>step log</h3>
+    <pre id="log" class="log"></pre>
+  </section>
+
+  <section class="card grow">
+    <h2>Sequences</h2>
+    <div id="seqs"></div>
+  </section>
+</main>
+
+<footer>
+  <span class="muted">Subscribed to <code>/engine/events</code>. Source: <a href="https://github.com/yourname/tiny_vllm" target="_blank">github</a>.</span>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

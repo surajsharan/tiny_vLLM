@@ -1,0 +1,7 @@
+torch>=2.2
+transformers>=4.45
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.5
+numpy
+httpx>=0.27
