@@ -282,6 +282,9 @@ def main() -> None:
     parser.add_argument("--max-num-batched-tokens", type=int, default=512)
     parser.add_argument("--max-model-len", type=int, default=2048)
     parser.add_argument("--disable-prefix-caching", action="store_true")
+    parser.add_argument("--record", default=None,
+                        help="Append every engine event to this JSONL file "
+                             "(e.g. web/events.jsonl) to power the static replay demo.")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -296,6 +299,7 @@ def main() -> None:
         max_num_batched_tokens=args.max_num_batched_tokens,
         max_model_len=args.max_model_len,
         enable_prefix_caching=not args.disable_prefix_caching,
+        record_path=args.record,
     )
 
     import uvicorn

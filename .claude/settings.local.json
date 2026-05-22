@@ -6,7 +6,9 @@
       "Bash(python -m pytest tests/test_block_manager.py tests/test_scheduler.py -v)",
       "Bash(pip install *)",
       "Bash(python -m pytest tests/ -v)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python scripts/make_demo_recording.py)",
+      "Bash(python *)"
     ]
   }
 }

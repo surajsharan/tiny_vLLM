@@ -1,12 +1,16 @@
 /* tiny_vllm — demo page client.
  *
- * Two streams in play:
+ * Runs in one of two modes:
  *
- *   /engine/events    — engine state snapshots (one per scheduling step)
- *   /generate         — token-level deltas for whatever prompt this page sent
+ *   LIVE     — talks to a tiny_vllm server.  Subscribes to /engine/events
+ *              (SSE) and POSTs to /generate to submit prompts.
+ *   REPLAY   — no backend.  Fetches a pre-recorded events.jsonl from the
+ *              same directory and dispatches each event with original timing.
+ *              Used for the GitHub Pages demo.
  *
- * The page itself is stateless; everything is driven by what comes off the
- * event stream.  Token deltas from /generate are merged into per-request UI.
+ * Mode is auto-detected: we try SSE first; if there's no response within a
+ * short window we fall back to replay.  Force a mode with ?mode=replay or
+ * ?mode=live in the URL.  Point at a different recording with ?session=URL.
  */
 
 const $ = (id) => document.getElementById(id);
@@ -27,6 +31,11 @@ const ui = {
   seqs: $("seqs"),
   send: $("send"),
   sendTwice: $("send-twice"),
+  prompt: $("prompt"),
+  banner: $("banner"),
+  speed: $("speed"),
+  playPause: $("play-pause"),
+  restart: $("restart"),
 };
 
 const state = {
@@ -38,12 +47,54 @@ const state = {
   requests: new Map(),
   // seq_id -> { request_id, blockTable, cachedPrefixBlocks, status, ... }
   seqsBySeqId: new Map(),
+  mode: "connecting",     // "live" | "replay" | "connecting"
+  replay: null,           // controller object for replay mode
 };
 
 function logLine(html, cls = "") {
   const t = new Date().toLocaleTimeString();
   ui.log.innerHTML += `<span class="${cls}">[${t}] ${html}</span>\n`;
   ui.log.scrollTop = ui.log.scrollHeight;
+}
+
+function setBanner(text, cls) {
+  if (!ui.banner) return;
+  ui.banner.textContent = text;
+  ui.banner.className = `banner ${cls || ""}`;
+  ui.banner.style.display = text ? "" : "none";
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  if (mode === "live") {
+    ui.connection.textContent = "live";
+    ui.connection.classList.remove("offline");
+    ui.connection.classList.add("online");
+    ui.send.disabled = false;
+    ui.sendTwice.disabled = false;
+    ui.prompt.disabled = false;
+    setBanner("", "");
+    if (ui.speed) ui.speed.style.display = "none";
+    if (ui.playPause) ui.playPause.style.display = "none";
+    if (ui.restart) ui.restart.style.display = "none";
+  } else if (mode === "replay") {
+    ui.connection.textContent = "replay";
+    ui.connection.classList.remove("offline");
+    ui.connection.classList.add("replay");
+    ui.send.disabled = true;
+    ui.sendTwice.disabled = true;
+    ui.prompt.disabled = true;
+    setBanner(
+      "REPLAY MODE — this is a pre-recorded session. Run the server locally to send your own prompts.",
+      "replay-banner",
+    );
+    if (ui.speed) ui.speed.style.display = "";
+    if (ui.playPause) ui.playPause.style.display = "";
+    if (ui.restart) ui.restart.style.display = "";
+  } else {
+    ui.connection.textContent = "connecting…";
+    ui.connection.classList.add("offline");
+  }
 }
 
 function initPool(numBlocks) {
@@ -68,13 +119,9 @@ function renderPool(pool) {
     const rc = pool.ref_counts[i];
     const hashed = pool.hashed[i];
     let cls = "block";
-    if (rc === 0) {
-      cls += hashed ? " cached" : " free";
-    } else if (rc === 1) {
-      cls += " used";
-    } else {
-      cls += " shared";
-    }
+    if (rc === 0) cls += hashed ? " cached" : " free";
+    else if (rc === 1) cls += " used";
+    else cls += " shared";
     if (hashed) cls += " hashed";
     el.className = cls;
     el.title = `block ${i} — refcount=${rc}${hashed ? " — hashed (cacheable)" : ""}`;
@@ -95,11 +142,10 @@ function renderPool(pool) {
 function renderSeqs(snapshot) {
   ui.schedStep.textContent = ` — step ${snapshot.step}`;
   const all = [...snapshot.running, ...snapshot.waiting];
-  // index for later token-delta merges
   state.seqsBySeqId = new Map(all.map(s => [s.seq_id, s]));
   ui.seqs.innerHTML = "";
   if (all.length === 0) {
-    ui.seqs.innerHTML = `<div class="muted">(no active sequences — send a prompt above)</div>`;
+    ui.seqs.innerHTML = `<div class="muted">(no active sequences${state.mode === 'replay' ? '' : ' — send a prompt above'})</div>`;
     return;
   }
   for (const s of all) {
@@ -129,7 +175,7 @@ function renderSeqs(snapshot) {
         </span>
       </div>
       <div class="seq-blocks">${blocksHTML || '<span class="muted">(no blocks yet)</span>'}</div>
-      <div class="seq-text"><span class="prompt">${escapeHtml(promptText)}</span><span class="gen">${escapeHtml(gen)}</span>${s.status === 'running' || s.status === 'prefilling' ? '<span class="cursor">&nbsp;</span>' : ''}</div>
+      <div class="seq-text"><span class="prompt">${escapeHtml(promptText)}</span><span class="gen">${escapeHtml(gen)}</span>${(s.status === 'running' || s.status === 'prefilling') ? '<span class="cursor">&nbsp;</span>' : ''}</div>
     `;
     ui.seqs.appendChild(div);
   }
@@ -137,6 +183,27 @@ function renderSeqs(snapshot) {
 
 function escapeHtml(s) {
   return (s || "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+}
+
+function applyDeltas(deltas) {
+  if (!deltas) return;
+  for (const d of deltas) {
+    let rec = state.requests.get(d.request_id);
+    if (!rec) {
+      rec = { promptText: "(prompt unknown)", generated: "", finished: false };
+      state.requests.set(d.request_id, rec);
+    }
+    if (d.new_text) rec.generated += d.new_text;
+    if (d.finished) {
+      rec.finished = true;
+      rec.finishReason = d.finish_reason;
+    }
+    const card = document.getElementById(`seq-${d.request_id}`);
+    if (card) {
+      const t = card.querySelector(".seq-text .gen");
+      if (t) t.textContent = rec.generated;
+    }
+  }
 }
 
 function handleEvent(ev) {
@@ -147,6 +214,17 @@ function handleEvent(ev) {
     renderSeqs(snap);
     return;
   }
+  if (ev.type === "request") {
+    // From the recording: capture prompt text + max_tokens for the UI.
+    const p = ev.payload;
+    state.requests.set(p.request_id, {
+      promptText: p.prompt,
+      generated: "",
+      finished: false,
+    });
+    logLine(`request ${p.request_id.slice(0,8)} — prompt=${p.prompt_len}t max_tokens=${p.max_tokens}`, "ev-admit");
+    return;
+  }
   if (ev.type === "step") {
     const p = ev.payload;
     ui.statTokens.textContent = p.num_tokens;
@@ -154,50 +232,134 @@ function handleEvent(ev) {
     ui.statMs.textContent = p.duration_ms.toFixed(1);
     if (p.preempted?.length) state.preempted += p.preempted.length;
     ui.statPre.textContent = state.preempted;
+    applyDeltas(p.deltas);
     renderPool(p.snapshot.block_pool);
     renderSeqs(p.snapshot);
 
     let msg = `step ${ev.step}: ${p.num_tokens}t (${p.num_prefill_seqs}P/${p.num_decode_seqs}D) in ${p.duration_ms.toFixed(1)}ms`;
     let cls = "ev-step";
-    if (p.newly_admitted?.length) {
-      msg += ` · admitted seq=${p.newly_admitted.join(",")}`;
-      cls = "ev-admit";
-    }
-    if (p.finished?.length) {
-      msg += ` · finished ${p.finished.map(r => r.slice(0,8)).join(",")}`;
-      cls = "ev-finish";
-    }
-    if (p.preempted?.length) {
-      msg += ` · PREEMPTED seq=${p.preempted.join(",")}`;
-      cls = "ev-preempt";
-    }
+    if (p.newly_admitted?.length) { msg += ` · admitted seq=${p.newly_admitted.join(",")}`; cls = "ev-admit"; }
+    if (p.finished?.length) { msg += ` · finished ${p.finished.map(r => r.slice(0,8)).join(",")}`; cls = "ev-finish"; }
+    if (p.preempted?.length) { msg += ` · PREEMPTED seq=${p.preempted.join(",")}`; cls = "ev-preempt"; }
     logLine(msg, cls);
   }
 }
 
-function connectEvents() {
+// ---------- live mode (SSE) ----------
+
+function connectLive() {
   const es = new EventSource("/engine/events");
-  es.onopen = () => {
-    ui.connection.textContent = "connected";
-    ui.connection.classList.remove("offline");
-    ui.connection.classList.add("online");
-  };
+  let gotOne = false;
+  es.onopen = () => { /* wait for first message to confirm live */ };
   es.onerror = () => {
-    ui.connection.textContent = "disconnected";
-    ui.connection.classList.remove("online");
-    ui.connection.classList.add("offline");
+    if (!gotOne) {
+      es.close();
+      startReplay();  // fall back
+    } else {
+      ui.connection.textContent = "disconnected";
+      ui.connection.classList.remove("online");
+      ui.connection.classList.add("offline");
+    }
   };
   es.onmessage = (e) => {
     if (!e.data) return;
-    try {
-      handleEvent(JSON.parse(e.data));
-    } catch (err) {
-      console.error("bad event", err, e.data);
-    }
+    if (!gotOne) { gotOne = true; setMode("live"); }
+    try { handleEvent(JSON.parse(e.data)); }
+    catch (err) { console.error("bad event", err, e.data); }
   };
+  // Give the server a couple seconds to respond before falling back.
+  setTimeout(() => {
+    if (!gotOne) {
+      es.close();
+      startReplay();
+    }
+  }, 2000);
 }
 
+// ---------- replay mode ----------
+
+async function startReplay() {
+  setMode("replay");
+  const params = new URLSearchParams(location.search);
+  const url = params.get("session") || "events.jsonl";
+  let text;
+  try {
+    const resp = await fetch(url, { cache: "no-cache" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    text = await resp.text();
+  } catch (e) {
+    setBanner(
+      `Could not load recording (${url}). Run the server locally or commit a web/events.jsonl recording.`,
+      "replay-banner error",
+    );
+    ui.connection.textContent = "no recording";
+    return;
+  }
+  const events = text.split("\n").filter(Boolean).map(l => JSON.parse(l));
+  if (events.length === 0) {
+    setBanner("Recording is empty.", "replay-banner error");
+    return;
+  }
+  state.replay = new Replayer(events);
+  state.replay.start();
+}
+
+class Replayer {
+  constructor(events) {
+    this.events = events;
+    this.idx = 0;
+    this.speed = parseFloat($("speed")?.value || "1");
+    this.paused = false;
+    this._timeout = null;
+  }
+  reset() {
+    this.stop();
+    this.idx = 0;
+    state.requests.clear();
+    state.preempted = 0;
+    ui.log.innerHTML = "";
+  }
+  setSpeed(s) {
+    this.speed = s;
+    if (!this.paused) {
+      this.stop();
+      this._schedule();
+    }
+  }
+  pause() { this.paused = true; this.stop(); }
+  resume() { if (!this.paused) return; this.paused = false; this._schedule(); }
+  stop() {
+    if (this._timeout) clearTimeout(this._timeout);
+    this._timeout = null;
+  }
+  start() {
+    this.reset();
+    this._schedule(0);
+  }
+  _schedule(delayOverride) {
+    if (this.idx >= this.events.length) {
+      logLine("(replay complete — press Restart to replay)", "ev-finish");
+      return;
+    }
+    let delay = 0;
+    if (delayOverride !== undefined) {
+      delay = delayOverride;
+    } else if (this.idx > 0) {
+      const gap = this.events[this.idx].timestamp - this.events[this.idx - 1].timestamp;
+      delay = Math.max(0, Math.min(gap, 1.0)) * 1000 / this.speed;  // cap at 1s
+    }
+    this._timeout = setTimeout(() => {
+      const ev = this.events[this.idx++];
+      try { handleEvent(ev); } catch (e) { console.error(e); }
+      if (!this.paused) this._schedule();
+    }, delay);
+  }
+}
+
+// ---------- live: prompt submission ----------
+
 async function sendPrompt(prompt) {
+  if (state.mode !== "live") return;
   const body = {
     prompt,
     max_tokens: parseInt($("max_tokens").value, 10),
@@ -215,8 +377,6 @@ async function sendPrompt(prompt) {
     logLine(`request failed: ${txt}`, "ev-preempt");
     return;
   }
-
-  // Parse SSE manually so we can read each event as it arrives.
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
@@ -242,31 +402,43 @@ async function sendPrompt(prompt) {
         if (j.text) rec.generated += j.text;
         rec.finished = j.finished;
         rec.finishReason = j.finish_reason;
-        // Repaint the matching seq card if visible.
         const card = document.getElementById(`seq-${myReqId}`);
         if (card) {
-          const text = card.querySelector(".seq-text .gen");
-          if (text) text.textContent = rec.generated;
+          const t = card.querySelector(".seq-text .gen");
+          if (t) t.textContent = rec.generated;
         }
-      } catch (e) {
-        console.error("bad chunk", e, data);
-      }
+      } catch (e) { console.error("bad chunk", e, data); }
     }
   }
 }
 
-ui.send.addEventListener("click", () => sendPrompt($("prompt").value));
+ui.send.addEventListener("click", () => sendPrompt(ui.prompt.value));
 ui.sendTwice.addEventListener("click", async () => {
-  const p = $("prompt").value;
-  // First send fills the prefix cache; second send should hit it.
+  const p = ui.prompt.value;
   await sendPrompt(p);
   await new Promise(r => setTimeout(r, 200));
   await sendPrompt(p);
 });
-$("prompt").addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-    sendPrompt(e.target.value);
-  }
+ui.prompt.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") sendPrompt(e.target.value);
 });
 
-connectEvents();
+if (ui.speed) ui.speed.addEventListener("change", () => {
+  state.replay?.setSpeed(parseFloat(ui.speed.value));
+});
+if (ui.playPause) ui.playPause.addEventListener("click", () => {
+  if (!state.replay) return;
+  if (state.replay.paused) { state.replay.resume(); ui.playPause.textContent = "Pause"; }
+  else { state.replay.pause(); ui.playPause.textContent = "Play"; }
+});
+if (ui.restart) ui.restart.addEventListener("click", () => state.replay?.start());
+
+// ---------- entry point ----------
+
+(function boot() {
+  setMode("connecting");
+  const force = new URLSearchParams(location.search).get("mode");
+  if (force === "replay") startReplay();
+  else if (force === "live") connectLive();
+  else connectLive();   // will auto-fall-back to replay on no-response
+})();

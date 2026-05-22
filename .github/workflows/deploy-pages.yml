@@ -1,0 +1,47 @@
+name: Deploy demo to GitHub Pages
+
+# Publishes the static visualization from web/ to GitHub Pages on every push
+# to main (and on demand from the Actions tab).  In Pages mode it runs against
+# a committed web/events.jsonl recording — see the README for how to capture
+# a fresh one.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one Pages deployment at a time; skip queued ones if a newer
+# commit arrives.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload web/ as artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

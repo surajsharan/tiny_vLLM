@@ -40,6 +40,17 @@ header h1 { font-size: 16px; margin: 0; font-weight: 600; }
 }
 .badge.online { background: rgba(63, 185, 80, 0.15); color: var(--green); }
 .badge.offline { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+.badge.replay { background: rgba(163, 113, 247, 0.15); color: var(--purple); }
+
+.banner {
+  padding: 8px 20px;
+  font-size: 12px;
+  background: rgba(163, 113, 247, 0.12);
+  color: var(--purple);
+  border-bottom: 1px solid rgba(163, 113, 247, 0.3);
+}
+.banner.error { background: rgba(248, 81, 73, 0.12); color: var(--red); border-bottom-color: rgba(248, 81, 73, 0.3); }
+.banner.replay-banner.error { background: rgba(248, 81, 73, 0.12); color: var(--red); }
 
 .prompt-box {
   padding: 12px 20px;
@@ -70,7 +81,21 @@ button {
   padding: 6px 14px; font-weight: 500; cursor: pointer;
 }
 button:hover { filter: brightness(1.1); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
 #send-twice { background: var(--purple); }
+
+textarea:disabled { opacity: 0.5; }
+
+.replay-controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.replay-controls select {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 6px; font-family: var(--mono);
+}
 
 main {
   display: grid;

@@ -25,6 +25,8 @@ class EngineConfig:
     # Logging / events
     emit_events: bool = True              # produce engine events for the UI
     event_buffer: int = 256
+    record_path: Optional[str] = None     # JSONL file to append every event to
+                                          # (powers the static GH-Pages replay)
 
     def __post_init__(self) -> None:
         if self.max_num_batched_tokens < self.block_size:

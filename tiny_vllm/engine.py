@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import json
 import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, TextIO
 
 from .block_manager import BlockManager
 from .config import EngineConfig, SamplingParams
@@ -69,6 +70,9 @@ class LLMEngine:
         self._step_idx = 0
         self._run_task: Optional[asyncio.Task] = None
         self._wake = asyncio.Event()
+        # recording (for the static GH-Pages replay)
+        self._record_fh: Optional[TextIO] = None
+        self._record_t0: float = 0.0
 
     # ---- lifecycle ------------------------------------------------------
 
@@ -87,6 +91,19 @@ class LLMEngine:
         )
         self.scheduler = Scheduler(self.config, self.block_manager)
         self.sampler = Sampler(self.model_runner.device)
+
+        # Open the recorder *after* the block manager exists so the initial
+        # snapshot we write is valid.
+        if self.config.record_path:
+            self._record_fh = open(self.config.record_path, "w", buffering=1)
+            self._record_t0 = time.monotonic()
+            self._record({
+                "type": "snapshot",
+                "step": 0,
+                "timestamp": 0.0,
+                "payload": self.snapshot(),
+            })
+
         self._run_task = asyncio.create_task(self._run_loop())
 
     async def shutdown(self) -> None:
@@ -97,6 +114,12 @@ class LLMEngine:
                 await asyncio.wait_for(self._run_task, timeout=5)
             except asyncio.TimeoutError:
                 self._run_task.cancel()
+        if self._record_fh is not None:
+            try:
+                self._record_fh.close()
+            except Exception:
+                pass
+            self._record_fh = None
 
     # ---- request submission --------------------------------------------
 
@@ -110,8 +133,10 @@ class LLMEngine:
             raise RuntimeError("engine not started")
         if isinstance(prompt, str):
             token_ids = self.model_runner.encode(prompt)
+            prompt_text = prompt
         else:
             token_ids = list(prompt)
+            prompt_text = self.model_runner.decode(token_ids)
         if not token_ids:
             raise ValueError("empty prompt")
         if len(token_ids) >= self.config.max_model_len:
@@ -129,6 +154,13 @@ class LLMEngine:
         self._prev_text_len[rid] = 0
         assert self.scheduler is not None
         self.scheduler.add(seq)
+        self._emit("request", {
+            "request_id": rid,
+            "seq_id": seq.seq_id,
+            "prompt": prompt_text,
+            "prompt_len": len(token_ids),
+            "max_tokens": sampling_params.max_tokens,
+        })
         self._wake.set()
         return rid
 
@@ -166,7 +198,7 @@ class LLMEngine:
             pass
 
     def _emit(self, event_type: str, payload: dict) -> None:
-        if not self.config.emit_events or not self._event_subscribers:
+        if not self.config.emit_events:
             return
         ev = EngineEvent(
             step=self._step_idx,
@@ -178,7 +210,6 @@ class LLMEngine:
             try:
                 q.put_nowait(ev)
             except asyncio.QueueFull:
-                # Drop oldest, push new.
                 try:
                     q.get_nowait()
                 except asyncio.QueueEmpty:
@@ -187,6 +218,23 @@ class LLMEngine:
                     q.put_nowait(ev)
                 except asyncio.QueueFull:
                     pass
+        # Mirror into the on-disk recording (timestamps re-based to t0).
+        if self._record_fh is not None:
+            self._record({
+                "type": ev.type,
+                "step": ev.step,
+                "timestamp": ev.timestamp - self._record_t0,
+                "payload": ev.payload,
+            })
+
+    def _record(self, ev: dict) -> None:
+        fh = self._record_fh
+        if fh is None:
+            return
+        try:
+            fh.write(json.dumps(ev, separators=(",", ":")) + "\n")
+        except Exception:
+            pass
 
     # ---- inspection ----------------------------------------------------
 
@@ -301,7 +349,9 @@ class LLMEngine:
                     self.scheduler.running.remove(seq)
                 self.block_manager.free(seq)
 
-            # Emit outputs to per-request queues.
+            # Emit outputs to per-request queues, and collect per-step deltas
+            # for the event stream (powers the replay UI's text panes).
+            step_deltas: list[dict] = []
             for item in sched.scheduled:
                 seq = item.seq
                 rid = seq.request_id
@@ -325,8 +375,14 @@ class LLMEngine:
                     q = self._output_queues.get(rid)
                     if q is not None:
                         await q.put(si)
+                    if new_text or is_done:
+                        step_deltas.append({
+                            "request_id": rid,
+                            "new_text": new_text,
+                            "finished": is_done,
+                            "finish_reason": seq.finish_reason,
+                        })
                     if is_done:
-                        # Clean up.
                         self._sequences.pop(rid, None)
                         self._prev_text_len.pop(rid, None)
 
@@ -340,6 +396,7 @@ class LLMEngine:
                 "preempted": sched.preempted,
                 "newly_admitted": sched.newly_admitted,
                 "finished": [s.request_id for s in finished_now],
+                "deltas": step_deltas,
                 "snapshot": self.snapshot(),
             })
 

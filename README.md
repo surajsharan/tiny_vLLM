@@ -76,6 +76,33 @@ pip install pytest
 python -m pytest tests/
 ```
 
+## GitHub Pages demo (replay mode)
+
+The visualization can run as a **static page** on GitHub Pages with no
+backend.  It plays back a recorded session from `web/events.jsonl`:
+
+1. The repo ships a fabricated `web/events.jsonl` so the page works on first
+   deploy (run `python scripts/make_demo_recording.py > web/events.jsonl` to
+   regenerate).
+2. To use a **real** recording instead, run the server with `--record`:
+   ```bash
+   python -m tiny_vllm.server --record web/events.jsonl
+   # …submit some prompts via the UI or smoke_client…
+   # Ctrl-C the server.  events.jsonl now contains the full session.
+   git add web/events.jsonl && git commit -m "fresh demo recording" && git push
+   ```
+3. Enable Pages once: **repo → Settings → Pages → Source: "GitHub Actions"**.
+   The workflow in `.github/workflows/deploy-pages.yml` then publishes
+   `web/` on every push to `main` that touches it.
+
+The page auto-detects mode:
+- Tries `/engine/events` SSE first; if it responds within 2s it's **live**.
+- Otherwise falls back to **replay**, fetching `events.jsonl` from the same
+  directory and playing it back with original timing (speed control / pause
+  / restart in the controls row).
+- Force a mode with `?mode=replay` or `?mode=live`; point at a different
+  recording with `?session=URL`.
+
 ## What the demo page shows
 
 | Panel | What you're looking at |
