@@ -1,0 +1,53 @@
+name: Sync to Hugging Face Space
+
+# Mirrors the repo to your Hugging Face Space on every push to main.
+# HF Spaces then rebuilds the Docker image and redeploys.
+#
+# One-time setup (see README "Hugging Face Space — live demo"):
+#   1. Create the Space at https://huggingface.co/new-space (SDK: Docker).
+#   2. Generate a write-access token at https://huggingface.co/settings/tokens.
+#   3. In the GitHub repo: Settings → Secrets and variables → Actions → add:
+#        HF_TOKEN          ← the token from step 2
+#        HF_USERNAME       ← your HF username (e.g. surajsharan)
+#        HF_SPACE_NAME     ← the Space name (e.g. tiny-vllm)
+#   4. Push to main, or trigger this workflow manually from the Actions tab.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: huggingface-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
+        run: |
+          set -e
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_USERNAME" ] || [ -z "$HF_SPACE_NAME" ]; then
+            echo "::notice::HF secrets not configured (HF_TOKEN/HF_USERNAME/HF_SPACE_NAME)."
+            echo "::notice::Skipping HF Space sync. See README for setup."
+            exit 0
+          fi
+          git config user.email "actions@github.com"
+          git config user.name  "github-actions[bot]"
+          REMOTE="https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE_NAME}"
+          git remote add huggingface "$REMOTE"
+          # Force-push: the HF Space repo is a mirror of this branch.
+          # If you also commit on HF (e.g., README edits in the Space UI),
+          # those would be overwritten — keep edits in this repo.
+          git push --force huggingface HEAD:main
+          echo "::notice::Synced to https://huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE_NAME}"

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -70,8 +71,18 @@ def _sse(data: dict | str) -> bytes:
     return f"data: {data}\n\n".encode("utf-8")
 
 
-def build_app(config: EngineConfig) -> FastAPI:
+def build_app(config: EngineConfig, cors_allow_origins: Optional[list[str]] = None) -> FastAPI:
     app = FastAPI(title="tiny_vllm", version="0.1.0")
+    # CORS so the GH-Pages frontend (or any external page) can call this
+    # backend when it's deployed on HF Spaces.  Read-only inference, so the
+    # blast radius of opening this up is small.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_allow_origins or ["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     engine = LLMEngine(config)
 
     @app.on_event("startup")
@@ -113,6 +124,14 @@ def build_app(config: EngineConfig) -> FastAPI:
                     "hint": "demo page not found; POST to /generate"}
 
     # ---- introspection -------------------------------------------------
+
+    @app.get("/health")
+    async def health() -> dict:
+        return {
+            "status": "ok" if engine.model_runner is not None else "starting",
+            "model": config.model,
+            "device": config.device,
+        }
 
     @app.get("/engine/snapshot")
     async def snapshot() -> dict:
@@ -300,8 +319,14 @@ def main() -> None:
     parser.add_argument("--record", default=None,
                         help="Append every engine event to this JSONL file "
                              "(e.g. web/events.jsonl) to power the static replay demo.")
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int,
+                        default=int(os.environ.get("PORT", "8000")))
+    parser.add_argument(
+        "--cors-origins", default=os.environ.get("TINY_VLLM_CORS_ORIGINS", "*"),
+        help="Comma-separated allowed origins for CORS (default '*' — fine "
+             "for the demo since this server is read-only inference).",
+    )
     args = parser.parse_args()
 
     cfg = EngineConfig(
@@ -317,8 +342,14 @@ def main() -> None:
         record_path=args.record,
     )
 
+    cors_origins: list[str] | None
+    if args.cors_origins.strip() in ("*", ""):
+        cors_origins = None  # defaults to ["*"]
+    else:
+        cors_origins = [o.strip() for o in args.cors_origins.split(",") if o.strip()]
+
     import uvicorn
-    app = build_app(cfg)
+    app = build_app(cfg, cors_allow_origins=cors_origins)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

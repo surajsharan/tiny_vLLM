@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-hf-space="https://encoder-tiny-vllm.hf.space">
 
 <nav class="topbar">
   <div class="crumb">
@@ -21,6 +21,7 @@
     <span>tiny_vllm</span>
   </div>
   <div class="right">
+    <a id="hf-live" href="#" target="_blank" rel="noopener" class="live-link" style="display:none">try live ↗</a>
     <a href="https://github.com/surajsharan/tiny_vLLM" target="_blank" rel="noopener">github ↗</a>
     <a href="https://surajsharan.github.io/" title="Back to portfolio">← back</a>
   </div>
@@ -67,6 +68,7 @@ python -m tiny_vllm.server --model Qwen/Qwen2.5-0.5B-Instruct
 # then open http://localhost:8000</code></pre>
     <div class="rl-foot">
       <button id="rl-copy" class="ghost">Copy command</button>
+      <a id="rl-hf" class="rl-cta" href="#" target="_blank" rel="noopener" style="display:none">Or use the hosted live demo ↗</a>
       <button id="rl-close" class="ghost">Dismiss</button>
     </div>
   </div>

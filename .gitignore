@@ -17,3 +17,6 @@ hf_cache/
 .idea/
 .claude/
 .cursor/
+.env                                                                                             
+.env.*                                                                                           
+secrets/ 

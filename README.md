@@ -1,3 +1,14 @@
+---
+title: tiny_vllm
+emoji: 🪶
+colorFrom: gray
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: Minimal continuous-batching LLM engine — paged KV, prefix caching, SSE
+---
+
 # tiny_vllm
 
 A **minimal continuous-batching LLM engine** built to be read end-to-end.  It
@@ -75,6 +86,54 @@ The model-free parts (block manager, scheduler) have unit tests:
 pip install pytest
 python -m pytest tests/
 ```
+
+## Hugging Face Space — live demo
+
+For a *live* (not recorded) demo you can talk to from any browser, deploy this
+repo as a Docker-based Hugging Face Space.  HF's free CPU tier (16 GB RAM,
+2 vCPU) fits Qwen2.5-0.5B comfortably.
+
+**One-time setup:**
+
+1. **Create the Space.**  Go to [huggingface.co/new-space](https://huggingface.co/new-space):
+   - Owner: your HF username
+   - Space name: e.g. `tiny-vllm` (must match `HF_SPACE_NAME` below)
+   - SDK: **Docker**
+   - License: MIT
+2. **Generate a write-access token** at
+   [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) → New
+   token → role **Write**.
+3. **Add three secrets** to this GitHub repo (Settings → Secrets and variables
+   → Actions → New repository secret):
+   - `HF_TOKEN` — the token from step 2
+   - `HF_USERNAME` — your HF username
+   - `HF_SPACE_NAME` — e.g. `tiny-vllm`
+
+On the next push to `main`, the `Sync to Hugging Face Space` workflow mirrors
+the repo to the Space.  HF then builds the Docker image (~3–5 min on first
+build because of the pre-fetched model) and the Space goes live at:
+
+```
+https://<lowercased-HF_USERNAME>-<HF_SPACE_NAME>.hf.space
+```
+
+(HF normalises subdomains to lowercase — `enCoder/tiny-vllm` becomes
+`encoder-tiny-vllm.hf.space`.)
+
+The GH Pages page links to this URL as a **"try live ↗"** pill in the
+topbar — update `data-hf-space` on `<body>` in `web/index.html` if your
+Space URL differs.
+
+**HF Spaces cost: free.**  Cold-start (after ~48 h of inactivity) takes ~30 s
+while the container wakes; subsequent requests are warm.
+
+**Files involved:**
+- `Dockerfile` — CPU-only torch, pre-downloads the model at build time.
+- `README.md` frontmatter — HF reads `sdk: docker`, `app_port: 7860`, etc.
+- `.github/workflows/sync-huggingface.yml` — mirrors GitHub → HF Spaces.
+- CORS is enabled on the server so the GH Pages frontend can call the HF
+  backend cross-origin (`?mode=live&backend=https://...hf.space` is a
+  potential future addition).
 
 ## GitHub Pages demo (replay mode)
 

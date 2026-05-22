@@ -467,6 +467,21 @@ if (ui.playPause) ui.playPause.addEventListener("click", () => {
 });
 if (ui.restart) ui.restart.addEventListener("click", () => state.replay?.start());
 
+// ---------- "Try live" link → Hugging Face Space ----------
+
+(function setupHFLink() {
+  const url = document.body.getAttribute("data-hf-space") || "";
+  // Don't advertise the live link if we're already on it (avoids
+  // showing "try live →" while on the live page).
+  const onHF = /\.hf\.space$/i.test(location.hostname) ||
+               /huggingface\.co$/i.test(location.hostname);
+  if (!url || onHF) return;
+  const top = document.getElementById("hf-live");
+  if (top) { top.href = url; top.style.display = ""; }
+  const rl = document.getElementById("rl-hf");
+  if (rl)  { rl.href  = url; rl.style.display  = ""; }
+})();
+
 // ---------- entry point ----------
 
 (function boot() {
