@@ -86,11 +86,26 @@ def build_app(config: EngineConfig) -> FastAPI:
 
     static_dir = Path(__file__).parent.parent / "web"
     if static_dir.exists():
+        # Keep the legacy /static prefix working for anyone bookmarking it,
+        # but also serve assets at root so the SAME HTML works on GH Pages
+        # (which has no Python backend and just serves files from web/).
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
         @app.get("/")
         async def root() -> FileResponse:
             return FileResponse(str(static_dir / "index.html"))
+
+        @app.get("/style.css")
+        async def _css() -> FileResponse:
+            return FileResponse(str(static_dir / "style.css"))
+
+        @app.get("/app.js")
+        async def _js() -> FileResponse:
+            return FileResponse(str(static_dir / "app.js"))
+
+        @app.get("/events.jsonl")
+        async def _jsonl() -> FileResponse:
+            return FileResponse(str(static_dir / "events.jsonl"))
     else:
         @app.get("/")
         async def root() -> dict:

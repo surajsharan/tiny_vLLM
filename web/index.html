@@ -3,12 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>tiny_vllm — engine internals</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>tiny_vllm — Suraj Sharan</title>
+<meta name="description" content="Minimal continuous-batching LLM engine: paged KV-cache, prefix caching, chunked prefill, SSE streaming. Live visualization of engine internals.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <h1>tiny_vllm <span class="muted">— minimal continuous-batching engine</span></h1>
+
+<nav class="topbar">
+  <div class="crumb">
+    <a href="https://surajsharan.github.io/">suraj sharan</a>
+    <span class="sep">/</span>
+    <a href="https://surajsharan.github.io/#projects">projects</a>
+    <span class="sep">/</span>
+    <span>tiny_vllm</span>
+  </div>
+  <div class="right">
+    <a href="https://github.com/surajsharan/tiny_vLLM" target="_blank" rel="noopener">github ↗</a>
+    <a href="https://surajsharan.github.io/" title="Back to portfolio">← back</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <h1>tiny_vllm<span class="muted"> --watch</span></h1>
+  <p class="subtitle">A minimal continuous-batching LLM engine — paged KV-cache, automatic prefix caching, chunked prefill, SSE streaming. Built to be read end-to-end. Below is a live visualization of the scheduler and memory pool.</p>
   <div class="status">
     <span id="connection" class="badge offline">connecting…</span>
     <span id="model" class="muted"></span>
@@ -56,12 +76,12 @@
   <section class="card">
     <h2>Scheduler <span class="muted" id="sched-step"></span></h2>
     <div class="stats">
-      <div class="stat"><div class="stat-label">tokens this step</div><div class="stat-value" id="stat-tokens">0</div></div>
+      <div class="stat"><div class="stat-label">tokens / step</div><div class="stat-value" id="stat-tokens">0</div></div>
       <div class="stat"><div class="stat-label">prefill / decode</div><div class="stat-value" id="stat-pfdec">0 / 0</div></div>
       <div class="stat"><div class="stat-label">step (ms)</div><div class="stat-value" id="stat-ms">0</div></div>
-      <div class="stat"><div class="stat-label">prefix cache hit-rate</div><div class="stat-value" id="stat-cache">0%</div></div>
+      <div class="stat"><div class="stat-label">prefix cache</div><div class="stat-value" id="stat-cache">—</div></div>
       <div class="stat"><div class="stat-label">free blocks</div><div class="stat-value" id="stat-free">0</div></div>
-      <div class="stat"><div class="stat-label">preemptions (total)</div><div class="stat-value" id="stat-pre">0</div></div>
+      <div class="stat"><div class="stat-label">preemptions</div><div class="stat-value" id="stat-pre">0</div></div>
     </div>
     <h3>step log</h3>
     <pre id="log" class="log"></pre>
@@ -74,9 +94,9 @@
 </main>
 
 <footer>
-  <span class="muted">Subscribed to <code>/engine/events</code>. Source: <a href="https://github.com/yourname/tiny_vllm" target="_blank">github</a>.</span>
+  Subscribed to <code>/engine/events</code> · Source on <a href="https://github.com/surajsharan/tiny_vLLM" target="_blank" rel="noopener">github.com/surajsharan/tiny_vLLM</a> · Designed to match <a href="https://surajsharan.github.io/">surajsharan.github.io</a>.
 </footer>
 
-<script src="/static/app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

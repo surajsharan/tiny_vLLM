@@ -8,7 +8,14 @@
       "Bash(python -m pytest tests/ -v)",
       "Bash(python -c ' *)",
       "Bash(python scripts/make_demo_recording.py)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "WebFetch(domain:surajsharan.github.io)",
+      "Bash(curl -sIL \"https://surajsharan.github.io/tiny_vLLM/events.jsonl\")",
+      "Bash(curl -sL \"https://surajsharan.github.io/tiny_vLLM/\")",
+      "Bash(curl -sL \"https://surajsharan.github.io/\")",
+      "Bash(curl -sL \"https://surajsharan.github.io/_next/static/css/9d0d2df30f6cb73d.css\")",
+      "Bash(curl -sL \"https://surajsharan.github.io/_next/static/css/0f8dc0fb86554783.css\")",
+      "Read(//tmp/**)"
     ]
   }
 }
